@@ -133,7 +133,7 @@ enum Secrets {
             configuring = true
             defer { configuring = false }
             let proposed = Connection(address: address.stringValue, token: token.stringValue, calendars: calendars.state == .on, reminders: reminders.state == .on)
-            if service != nil && proposed.address == "http://127.0.0.1:3150" && proposed.token != connection?.token {
+            if service != nil && proposed.token != connection?.token {
                 message.stringValue = "The bundled server token is managed in Keychain. Keep its existing token; manual rotation is not supported while it is running."
                 return
             }
