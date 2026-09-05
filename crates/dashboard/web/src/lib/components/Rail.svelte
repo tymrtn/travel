@@ -4,7 +4,7 @@
   // account row opens the contextual AccountDrawer. Every data surface here has
   // an explicit loading / error / empty state — no silent failures.
   import { base } from '$app/paths';
-  import { page } from '$app/state';
+  import { page } from '$lib/legacy-page';
   import {
     api,
     accountHealthFromCockpit,

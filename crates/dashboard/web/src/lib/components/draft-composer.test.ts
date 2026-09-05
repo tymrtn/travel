@@ -17,7 +17,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { page as pageState } from '$app/state';
+import { page as pageState } from '$lib/legacy-page';
 
 const { apiMock } = vi.hoisted(() => ({
   apiMock: {

@@ -19,7 +19,7 @@
   //     endpoint is not called (it can 404 while the draft row is fine) and the
   //     draft is never marked Seen.
 
-  import { page } from '$app/state';
+  import { page } from '$lib/legacy-page';
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
   import { Spinner, MonoTag, Badge, Toast } from '$lib/components';

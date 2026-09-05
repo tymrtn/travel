@@ -9,7 +9,7 @@
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { page as pageState } from '$app/state';
+import { page as pageState } from '$lib/legacy-page';
 import { goto } from '$app/navigation';
 
 const { readerApiMock, apiMock } = vi.hoisted(() => ({

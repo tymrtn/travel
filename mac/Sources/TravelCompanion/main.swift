@@ -10,7 +10,7 @@ struct Item: Codable {
     let alarm_minutes: Int?
 }
 struct Projection: Codable { let version: Int; let items: [Item] }
-struct Mapping: Codable { var nativeID, revision, fingerprint: String }
+struct Mapping: Codable { var nativeID, revision, fingerprint: String; var completed: Bool? = nil }
 struct Connection {
     let address, token: String
     let calendars, reminders: Bool
@@ -66,10 +66,17 @@ enum Secrets {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         token.stringValue = Secrets.read()
+        if address.stringValue == "http://127.0.0.1:3150", token.stringValue.isEmpty {
+            var bytes = [UInt8](repeating: 0, count: 32)
+            guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { NSApp.terminate(nil); return }
+            let generated = bytes.map { String(format: "%02x", $0) }.joined()
+            do { try Secrets.save(generated); token.stringValue = generated }
+            catch { NSApp.presentError(error); NSApp.terminate(nil); return }
+        }
         connection = Connection(address: address.stringValue, token: token.stringValue, calendars: UserDefaults.standard.bool(forKey: "calendars"), reminders: UserDefaults.standard.bool(forKey: "reminders"))
         if let data = UserDefaults.standard.data(forKey: "mappings") { mappings = (try? JSONDecoder().decode([String: Mapping].self, from: data)) ?? [:] }
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        status.button?.title = "Travel"
+        status.button?.image = NSImage(systemSymbolName: "airplane.departure", accessibilityDescription: "Travel")
         let menu = NSMenu()
         menu.addItem(withTitle: "Settings and synchronization…", action: #selector(show), keyEquivalent: "")
         menu.addItem(withTitle: "Open Travel", action: #selector(openTravel), keyEquivalent: "")
@@ -79,6 +86,12 @@ enum Secrets {
         buildWindow()
         if let executable = Bundle.main.url(forResource: "travel", withExtension: nil), address.stringValue == "http://127.0.0.1:3150" {
             let process = Process(); process.executableURL = executable; process.arguments = ["serve"]
+            var environment = ProcessInfo.processInfo.environment
+            environment["TRAVEL_TOKEN"] = token.stringValue
+            process.environment = environment
+            process.terminationHandler = { [weak self] process in
+                if process.terminationStatus != 0 { Task { @MainActor in self?.message.stringValue = "Travel could not start. Port 3150 may already be in use. Quit other Travel copies and reopen this app." } }
+            }
             process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
             do { try process.run(); service = process } catch { message.stringValue = "Could not start the bundled server. Open Travel to check an existing instance." }
         }
@@ -90,10 +103,11 @@ enum Secrets {
     }
 
     func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 310), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 390), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Travel companion"; window.isReleasedWhenClosed = false
         let save = NSButton(title: "Save and synchronize", target: self, action: #selector(enable))
-        let stack = NSStackView(views: [NSTextField(labelWithString: "Travel server address"), address, NSTextField(labelWithString: "Server access token (stored in Keychain)"), token, calendars, reminders, save, message])
+        let copy = NSButton(title: "Copy token for browser sign-in", target: self, action: #selector(copyToken))
+        let stack = NSStackView(views: [NSTextField(labelWithString: "Travel server address"), address, NSTextField(labelWithString: "Server access token (stored in Keychain)"), token, copy, calendars, reminders, save, message])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(stack)
@@ -101,6 +115,16 @@ enum Secrets {
     }
     @objc func show() { window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func quit() { service?.terminate(); NSApp.terminate(nil) }
+    @objc func copyToken() {
+        guard let configured = connection, !configured.token.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(configured.token, forType: .string)
+        let change = NSPasteboard.general.changeCount
+        message.stringValue = "Paste into Connections → Owner access token. Clipboard clears after 60 seconds if unchanged."
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+            if NSPasteboard.general.changeCount == change { NSPasteboard.general.clearContents() }
+        }
+    }
     @objc func openTravel() { if let configured = connection, let url = try? configured.request("/travel").url { NSWorkspace.shared.open(url) } }
     @objc func wake() { Task { await sync() } }
     @objc func enable() {
@@ -109,6 +133,10 @@ enum Secrets {
             configuring = true
             defer { configuring = false }
             let proposed = Connection(address: address.stringValue, token: token.stringValue, calendars: calendars.state == .on, reminders: reminders.state == .on)
+            if service != nil && proposed.address == "http://127.0.0.1:3150" && proposed.token != connection?.token {
+                message.stringValue = "The bundled server token is managed in Keychain. Keep its existing token; manual rotation is not supported while it is running."
+                return
+            }
             guard (try? proposed.request("/api/health")) != nil else { message.stringValue = "Use HTTPS for remote servers or HTTP on localhost."; return }
             if proposed.address != connection?.address && (!mappings.isEmpty || syncing) {
                 message.stringValue = "This companion is paired with another server. Export your settings before changing the pairing."; return
@@ -160,9 +188,15 @@ enum Secrets {
             guard projection.version == 1 else { throw URLError(.cannotParseResponse) }
             var conflicts = 0
             for item in projection.items {
+                if let alarm = item.alarm_minutes, !(0...525600).contains(alarm) { conflicts += 1; continue }
                 if item.kind == "event" && !configured.calendars || item.kind == "reminder" && !configured.reminders { continue }
                 let previous = mappings[item.id]
                 let existing = previous.flatMap { store.calendarItem(withIdentifier: $0.nativeID) }
+                if let reminder = existing as? EKReminder, let previous,
+                   previous.revision != item.updated_at,
+                   reminder.isCompleted != (previous.completed ?? item.completed) {
+                    conflicts += 1; continue
+                }
                 if let existing, let previous, fingerprint(existing) != previous.fingerprint { conflicts += 1; continue }
                 if item.status == "cancelled" || item.status == "canceled" {
                     if let event = existing as? EKEvent { try store.remove(event, span: .thisEvent, commit: true) }
@@ -204,10 +238,10 @@ enum Secrets {
                 }
                 native.title = item.title; native.notes = item.notes + "\nTravel item: " + item.id
                 native.url = item.url.flatMap(URL.init(string:))
-                native.alarms = item.alarm_minutes.map { [EKAlarm(relativeOffset: -Double($0 * 60))] }
+                native.alarms = item.alarm_minutes.map { [EKAlarm(relativeOffset: -Double($0) * 60)] }
                 if let event = native as? EKEvent { try store.save(event, span: .thisEvent, commit: true) }
                 if let reminder = native as? EKReminder { try store.save(reminder, commit: true) }
-                mappings[item.id] = Mapping(nativeID: native.calendarItemIdentifier, revision: item.updated_at, fingerprint: fingerprint(native))
+                mappings[item.id] = Mapping(nativeID: native.calendarItemIdentifier, revision: item.updated_at, fingerprint: fingerprint(native), completed: item.completed)
                 UserDefaults.standard.set(try JSONEncoder().encode(mappings), forKey: "mappings")
             }
             message.stringValue = conflicts == 0 ? "Updated at \(Date().formatted())." : "\(conflicts) items need review; local edits were preserved."

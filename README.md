@@ -101,6 +101,13 @@ script never replaces an existing package. It signs ad hoc by default and does
 not notarize. Set `TRAVEL_SIGNING_IDENTITY` to your identity for a signed build.
 Public distribution still requires your Apple signing/notarization workflow.
 
+The bundle includes a locally rendered app icon. On first local launch, the
+companion generates an owner token in Keychain and passes it to the bundled
+service. Use “Copy token for browser sign-in” to sign in on Connections; the
+clipboard is cleared after 60 seconds if unchanged. Do not share the owner token
+with family members—create scoped invitations instead. Quit other Travel copies
+before opening the installed app so port 3150 belongs to the intended instance.
+
 Calendar and Reminders permissions are requested only when enabled. The current
 companion uses writable local destinations; it does not silently select iCloud.
 If none exists, use calendar downloads. Native notifications and explicit

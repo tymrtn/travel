@@ -20,7 +20,7 @@
   //   • CSRF is handled by the shared request() helper in $lib/api. Nothing
   //     here bypasses it, and there is no direct-send path.
 
-  import { page } from '$app/state';
+  import { page } from '$lib/legacy-page';
   import {
     addrKey,
     optionalAddrsValid,
