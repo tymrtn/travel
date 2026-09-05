@@ -1,0 +1,32 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: crates/dashboard/web/package-lock.json
+      - name: Browser checks
+        working-directory: crates/dashboard/web
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run build
+      - name: Rust checks
+        run: |
+          rustup update stable --no-self-update
+          cargo +stable test --workspace --locked
+          cargo +stable build --locked -p travel
+      - name: Mac companion
+        if: runner.os == 'macOS'
+        run: swift build --package-path mac

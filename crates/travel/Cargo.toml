@@ -1,0 +1,15 @@
+[package]
+name = "travel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+envelope-email-dashboard = { path = "../dashboard" }
+envelope-email-store = { path = "../store" }
+tokio.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }

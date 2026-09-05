@@ -1,0 +1,1 @@
+.env-spinner.svelte-f4erjd{border:2px solid var(--env-rule);border-top-color:var(--env-accent);border-radius:50%;width:1rem;height:1rem;animation:.7s linear infinite svelte-f4erjd-env-spin;display:inline-block}@keyframes svelte-f4erjd-env-spin{to{transform:rotate(360deg)}}.root-redirect.svelte-1uha8ag{flex:1;justify-content:center;align-items:center;display:flex}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>local.sovereign.travel</string>
+<key>CFBundleName</key><string>Travel</string>
+<key>CFBundleExecutable</key><string>TravelCompanion</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>LSUIElement</key><true/>
+<key>NSCalendarsFullAccessUsageDescription</key><string>Travel updates the itinerary events it creates in your selected calendar.</string>
+<key>NSRemindersFullAccessUsageDescription</key><string>Travel synchronizes its travel tasks and booking deadlines with Reminders.</string>
+</dict></plist>

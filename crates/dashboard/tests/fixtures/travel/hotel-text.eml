@@ -1,0 +1,14 @@
+From: Booking.com <noreply@booking.com>
+To: traveler@example.test
+Subject: Booking confirmation
+Date: Mon, 31 Aug 2026 09:05:00 +0000
+Message-ID: <hotel-text-fixture@example.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Reservation confirmed
+Confirmation: HTL-93822
+Hotel: Casa Bonay Barcelona
+Check-in: September 12, 2026 3:00 PM
+Check-out: September 15, 2026 11:00 AM
+Total: EUR 624.10

@@ -1,0 +1,5 @@
+# Replace this hostname with your own. Automatic HTTPS contacts a certificate
+# authority only when you explicitly run this optional reverse proxy.
+travel.example.com {
+    reverse_proxy 127.0.0.1:3150
+}
