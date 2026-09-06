@@ -18,6 +18,54 @@ use tower::ServiceExt;
 const NOW: &str = "2026-08-31T12:00:00Z";
 
 #[tokio::test]
+async fn browser_handoff_requires_owner_and_creates_single_use_scoped_session() {
+    use envelope_email_dashboard::auth::AuthConfig;
+    let state = fixture().state.with_auth(AuthConfig::from_parts(Some("owner-test-token".into()), Vec::new()));
+    let app = dashboard_router(state);
+    for token in [None, Some("wrong-token")] {
+        let mut req = Request::builder().method("POST").uri("/api/v1/browser-handoff");
+        if let Some(token) = token { req = req.header(header::AUTHORIZATION, format!("Bearer {token}")); }
+        assert_eq!(request(app.clone(), req.body(Body::empty()).unwrap()).await.0, StatusCode::UNAUTHORIZED);
+    }
+    let (status, headers, body) = request(app.clone(), Request::builder().method("POST").uri("/api/v1/browser-handoff")
+        .header(header::AUTHORIZATION, "Bearer owner-test-token").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CACHE_CONTROL], "no-store");
+    let result: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(result["expires_in"], 60);
+    assert!(!String::from_utf8_lossy(&body).contains("owner-test-token"));
+    let code = result["code"].as_str().unwrap();
+    let consume = |origin: &str| Request::builder().method("POST").uri("/api/v1/browser-handoff/consume")
+        .header(header::HOST, "travel.example.test").header("x-forwarded-proto", "https")
+        .header(header::ORIGIN, origin).header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({"code":code}).to_string())).unwrap();
+    assert_eq!(request(app.clone(), consume("https://attacker.example")).await.0, StatusCode::FORBIDDEN);
+    let (first, second) = tokio::join!(request(app.clone(), consume("https://travel.example.test")), request(app.clone(), consume("https://travel.example.test")));
+    assert!(matches!((first.0, second.0), (StatusCode::OK, StatusCode::UNAUTHORIZED) | (StatusCode::UNAUTHORIZED, StatusCode::OK)));
+    let (_, headers, _) = if first.0 == StatusCode::OK { first } else { second };
+    let set_cookie = headers[header::SET_COOKIE].to_str().unwrap();
+    assert!(set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Strict") && set_cookie.contains("; Secure"));
+    let cookie = set_cookie.split(';').next().unwrap();
+    assert_eq!(request(app.clone(), Request::builder().uri("/api/travel/overview").header(header::COOKIE, cookie).body(Body::empty()).unwrap()).await.0, StatusCode::OK);
+    // A browser session alone cannot issue more owner handoffs or bypass CSRF.
+    assert_eq!(request(app.clone(), Request::builder().method("POST").uri("/api/v1/browser-handoff").header(header::COOKIE, cookie).body(Body::empty()).unwrap()).await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(request(app, Request::builder().method("POST").uri("/api/travel/trips").header(header::COOKIE, cookie).header(header::CONTENT_TYPE,"application/json").body(Body::from("{}")).unwrap()).await.0, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn family_invitation_cannot_mint_owner_browser_handoff() {
+    use envelope_email_dashboard::auth::AuthConfig;
+    let app = dashboard_router(fixture().state.with_auth(AuthConfig::from_parts(Some("owner-test-token".into()), Vec::new())));
+    let (_, _, body) = request(app.clone(), Request::builder().method("POST").uri("/api/v1/members")
+        .header(header::AUTHORIZATION,"Bearer owner-test-token").header(header::CONTENT_TYPE,"application/json")
+        .body(Body::from(json!({"name":"Family","role":"viewer","trips":["trip-paris"]}).to_string())).unwrap()).await;
+    let invitation: Value = serde_json::from_slice(&body).unwrap();
+    let token = invitation["enrollment_path"].as_str().unwrap().split("#token=").nth(1).unwrap();
+    assert_eq!(request(app, Request::builder().method("POST").uri("/api/v1/browser-handoff")
+        .header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::empty()).unwrap()).await.0, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn unauthenticated_local_instance_rejects_dns_rebinding_hosts(){
     let app=dashboard_router(fixture().state);
     for host in ["attacker.example","localhost.attacker.example","127.0.0.1.attacker.example"]{

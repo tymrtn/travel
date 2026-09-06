@@ -4,6 +4,10 @@
 <key>CFBundleIdentifier</key><string>local.sovereign.travel</string>
 <key>CFBundleName</key><string>Travel</string>
 <key>CFBundleIconFile</key><string>Travel</string>
+<key>CFBundleURLTypes</key><array><dict>
+<key>CFBundleURLName</key><string>local.sovereign.travel.open</string>
+<key>CFBundleURLSchemes</key><array><string>travel</string></array>
+</dict></array>
 <key>CFBundleExecutable</key><string>TravelCompanion</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.1.0</string>

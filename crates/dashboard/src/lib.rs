@@ -1,6 +1,7 @@
 //! Standalone Travel HTTP service. No mail send, move, or delete routes.
 pub mod assets;
 pub mod auth;
+pub mod browser_handoff;
 pub mod backup;
 pub mod csrf;
 pub mod documents;
@@ -89,6 +90,8 @@ pub fn dashboard_router(state: AppState) -> Router {
         ));
     let api = Router::new()
         .route("/v1/session", post(household::session))
+        .route("/v1/browser-handoff", post(browser_handoff::issue))
+        .route("/v1/browser-handoff/consume", post(browser_handoff::consume))
         .route("/v1/oauth/gmail/callback", get(oauth::callback))
         .route("/health", get(|| async { axum::Json(serde_json::json!({"product":"Travel","status":"ok","version":env!("CARGO_PKG_VERSION")})) }))
         .route("/public/travel/{token}", get(t::public_trip))
@@ -124,7 +127,7 @@ async fn local_host_boundary(
 async fn assets(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
     let shell = path.is_empty()
-        || matches!(path, "travel" | "household" | "settings")
+        || matches!(path, "travel" | "household" | "settings" | "signin")
         || path.starts_with("share/");
     let asset = assets::WebAssets::get(path).or_else(|| {
         if shell {

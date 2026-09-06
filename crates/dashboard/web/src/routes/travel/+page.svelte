@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BookingEditor from '$lib/BookingEditor.svelte';
+  import SignIn from '$lib/SignIn.svelte';
   import { EnvelopeApiError as TravelApiError } from '$lib/api';
   import {
     buildReceiptApprovalInput,
@@ -24,6 +25,7 @@
   let overview = $state<TravelOverview | null>(null);
   let loading = $state(true);
   let pageError = $state<string | null>(null);
+  let needsSignIn = $state(false);
   let notice = $state<string | null>(null);
   let view = $state<View>('overview');
   let busy = $state<string | null>(null);
@@ -120,6 +122,7 @@
     pageError = null;
     try {
       overview = await travelApi.overview();
+      needsSignIn = false;
       if (overview.trips.length > 0 || localStorage.getItem('travel-without-mailbox') === 'true') useWithoutMailbox = true;
       seedReceiptEdits(overview.receipts);
       const zone = overview.settings?.timezone ?? overview.settings?.home_timezone;
@@ -139,7 +142,13 @@
       if (!taskTripId && trips[0]) taskTripId = trips[0].id;
       if (!shareTripId && trips[0]) shareTripId = trips[0].id;
     } catch (error) {
-      pageError = message(error, 'Travel could not be loaded.');
+      if (error instanceof TravelApiError && error.status === 401) {
+        needsSignIn = true;
+        overview = null;
+        pageError = null;
+      } else {
+        pageError = message(error, 'Travel could not be loaded.');
+      }
     } finally {
       loading = false;
     }
@@ -523,7 +532,7 @@
 </script>
 
 <svelte:head>
-  <title>Travel · Travel</title>
+  <title>Your trips · Travel</title>
   <meta
     name="description"
     content="A private travel inbox, itinerary, receipt review desk, and family calendar."
@@ -533,9 +542,8 @@
 <div class="travel-page">
   <header class="travel-header">
     <div>
-      <p class="eyebrow">Travel travel desk</p>
-      <h1>Every trip, from inbox to arrival.</h1>
-      <p class="lede">Receipts become a calm itinerary, with one shared plan for everyone going.</p>
+      <h1>Your trips</h1>
+      <p class="lede">Reservations, receipts, and plans for the people traveling with you.</p>
     </div>
     <div class="header-actions">
       {#if connected}
@@ -563,20 +571,20 @@
   {#if loading}
     <div class="loading-card" aria-live="polite">
       <span class="loader" aria-hidden="true"></span>
-      Opening your travel desk…
+      Loading your trips…
     </div>
+  {:else if needsSignIn}
+    <SignIn onSignedIn={() => { void load(); }} />
   {:else if !overview && pageError}
     <section class="empty-load panel">
-      <p class="eyebrow">Travel is taking a detour</p>
-      <h2>We couldn’t open this workspace.</h2>
-      <p>The rest of Travel is untouched. Retry when the service is available.</p>
+      <h2>Couldn’t load your trips</h2>
+      <p>Check that Travel is running on your Mac or server, then try again.</p>
       <button class="button primary" onclick={() => load()}>Try again</button>
     </section>
   {:else if !connected && !useWithoutMailbox}
     <section class="onboarding-grid" aria-labelledby="connect-title">
       <div class="onboarding-story">
-        <span class="step-number">01</span>
-        <h2 id="connect-title">Give travel receipts their own runway.</h2>
+        <h2 id="connect-title">Add your travel receipts</h2>
         <button class="button primary" onclick={() => { useWithoutMailbox = true; localStorage.setItem('travel-without-mailbox','true'); }}>Use without a mailbox</button>
         <p>
           Connect the Gmail address where airlines, hotels, trains, and rental companies send
@@ -1069,7 +1077,7 @@
   .travel-page { width: 100%; min-height: 100%; overflow: auto; padding: clamp(1rem, 3vw, 2.5rem); background: var(--env-page); }
   .travel-header { max-width: 1440px; margin: 0 auto 1.5rem; display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; }
   h1, h2, h3, p { margin-top: 0; }
-  h1 { max-width: 720px; margin-bottom: .5rem; font-size: clamp(2rem, 4vw, 3.75rem); line-height: .98; letter-spacing: -.045em; font-weight: 600; }
+  h1 { max-width: 720px; margin-bottom: .5rem; font-size: clamp(2rem, 3vw, 2.75rem); line-height: 1.1; letter-spacing: -.035em; font-weight: 600; }
   h2 { margin-bottom: .4rem; font-size: clamp(1.35rem, 2vw, 2rem); line-height: 1.05; letter-spacing: -.025em; }
   h3 { margin-bottom: .25rem; font-size: 1.05rem; }
   .eyebrow { margin-bottom: .55rem; color: var(--env-accent); font-family: var(--font-mono); font-size: .68rem; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; }

@@ -103,8 +103,13 @@ Public distribution still requires your Apple signing/notarization workflow.
 
 The bundle includes a locally rendered app icon. On first local launch, the
 companion generates an owner token in Keychain and passes it to the bundled
-service. Use “Copy token for browser sign-in” to sign in on Connections; the
-clipboard is cleared after 60 seconds if unchanged. Do not share the owner token
+service. Opening the app or choosing “Open Travel” signs the default browser in
+using a single-use, 60-second code. The permanent token is never placed in a URL.
+The browser removes the code fragment immediately and receives a private session
+cookie. A signed-out page offers “Open Travel for Mac”; another browser or a
+remote client can still use the access-token form. The Copy token button remains
+available in Mac settings and clears the clipboard after 60 seconds if unchanged.
+Do not share the owner token
 with family members—create scoped invitations instead. Quit other Travel copies
 before opening the installed app so port 3150 belongs to the intended instance.
 

@@ -100,14 +100,16 @@ enum Secrets {
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in Task { @MainActor in await self?.sync() } }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wake), name: NSWorkspace.didWakeNotification, object: nil)
         show()
+        Task { await openBrowser() }
     }
 
     func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 390), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 460), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Travel companion"; window.isReleasedWhenClosed = false
         let save = NSButton(title: "Save and synchronize", target: self, action: #selector(enable))
+        let open = NSButton(title: "Open Travel in browser", target: self, action: #selector(openTravel))
         let copy = NSButton(title: "Copy token for browser sign-in", target: self, action: #selector(copyToken))
-        let stack = NSStackView(views: [NSTextField(labelWithString: "Travel server address"), address, NSTextField(labelWithString: "Server access token (stored in Keychain)"), token, copy, calendars, reminders, save, message])
+        let stack = NSStackView(views: [open, NSTextField(labelWithString: "Travel server address"), address, NSTextField(labelWithString: "Server access token (stored in Keychain)"), token, copy, calendars, reminders, save, message])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(stack)
@@ -125,11 +127,56 @@ enum Secrets {
             if NSPasteboard.general.changeCount == change { NSPasteboard.general.clearContents() }
         }
     }
-    @objc func openTravel() { if let configured = connection, let url = try? configured.request("/travel").url { NSWorkspace.shared.open(url) } }
+    @objc func openTravel() { Task { await openBrowser() } }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        // The browser can request opening the saved connection, but cannot
+        // choose an address, redirect, credential, or settings through this URL.
+        if urls.contains(where: { $0.scheme == "travel" && $0.host == "open" }) { openTravel() }
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openTravel(); return true
+    }
+    var openingBrowser = false
+    func openBrowser() async {
+        guard !openingBrowser, let configured = connection else { return }
+        openingBrowser = true; defer { openingBrowser = false }
+        if configured.token.isEmpty {
+            if let url = try? configured.request("/travel").url { NSWorkspace.shared.open(url) }
+            return
+        }
+        // The bundled service may still be starting. Retry connection errors,
+        // never a rejected credential or redirect.
+        for attempt in 0..<20 {
+            do {
+                var request = try configured.request("/api/v1/browser-handoff")
+                request.httpMethod = "POST"; request.timeoutInterval = 3
+                let (data, response) = try await network.data(for: request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200,
+                      let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let code = result["code"] as? String,
+                      code.count == 64, code.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+                      let base = try configured.request("/signin").url,
+                      var url = URLComponents(url: base, resolvingAgainstBaseURL: true) else {
+                    message.stringValue = "Browser sign-in was not accepted. Check the saved server connection and make sure the server is up to date."
+                    return
+                }
+                url.fragment = "handoff=" + code
+                if let destination = url.url { NSWorkspace.shared.open(destination) }
+                message.stringValue = "Travel opened in your browser. The sign-in link expires after one minute."
+                return
+            } catch {
+                if attempt == 19 { message.stringValue = "Travel has not started yet. Check the server address, then choose Open Travel again."; return }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+    }
     @objc func wake() { Task { await sync() } }
     @objc func enable() {
         Task {
-            guard !configuring else { return }
+            guard !configuring, !syncing else {
+                message.stringValue = "A sync is finishing. Wait for it to complete, then save your settings again."
+                return
+            }
             configuring = true
             defer { configuring = false }
             let proposed = Connection(address: address.stringValue, token: token.stringValue, calendars: calendars.state == .on, reminders: reminders.state == .on)
@@ -217,9 +264,16 @@ enum Secrets {
                         req.setValue(csrf, forHTTPHeaderField: "X-Travel-CSRF")
                     }
                     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    req.httpBody = try JSONSerialization.data(withJSONObject: ["completed": reminder.isCompleted, "expected_updated_at": item.updated_at])
+                    let submittedCompletion = reminder.isCompleted
+                    req.httpBody = try JSONSerialization.data(withJSONObject: ["completed": submittedCompletion, "expected_updated_at": item.updated_at])
                     let (_, response) = try await network.data(for: req)
                     if (response as? HTTPURLResponse)?.statusCode != 200 { conflicts += 1 }
+                    else {
+                        // Acknowledge the submitted value, not a local value
+                        // that may have changed while the request was pending.
+                        mappings[item.id]?.completed = submittedCompletion
+                        UserDefaults.standard.set(try JSONEncoder().encode(mappings), forKey: "mappings")
+                    }
                     continue
                 }
                 if let previous, previous.revision == item.updated_at, existing != nil { continue }

@@ -20,6 +20,7 @@ use crate::events::EventBus;
 /// Shared application state injected into every handler.
 #[derive(Clone)]
 pub struct AppState {
+    pub browser_handoffs: Arc<Mutex<crate::browser_handoff::Handoffs>>,
     pub db: Arc<Mutex<Database>>,
     pub imap_pool: Arc<Mutex<HashMap<String, Arc<Mutex<ImapClient>>>>>,
     travel_receipt_operations: Arc<Mutex<HashMap<String, Weak<Mutex<()>>>>>,
@@ -40,6 +41,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(db: Database, backend: CredentialBackend) -> Self {
         Self {
+            browser_handoffs: Arc::new(Mutex::new(crate::browser_handoff::Handoffs::default())),
             db: Arc::new(Mutex::new(db)),
             imap_pool: Arc::new(Mutex::new(HashMap::new())),
             travel_receipt_operations: Arc::new(Mutex::new(HashMap::new())),

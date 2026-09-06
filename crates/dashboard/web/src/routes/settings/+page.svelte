@@ -19,6 +19,8 @@
   async function login() {
     const response = await fetch('/api/v1/session', {method:'POST', headers:{Authorization:`Bearer ${accessToken}`}});
     accessToken=''; if (!response.ok) throw new Error('Access token was not accepted.');
+    const result = await response.json();
+    window.location.assign(result.destination === '/household' ? '/household' : '/travel');
   }
   async function saveModel() {
     await request('/v1/intelligence',{method:'PUT',body:{daily_call_limit:limit,timeout_seconds:90,provider:type==='api'?{type:'api',endpoint,model,api_key_env:key}:{type:'cli',executable,args:JSON.parse(args),environment:[],allow_unsandboxed:unsandboxed}}});
