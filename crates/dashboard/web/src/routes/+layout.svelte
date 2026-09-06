@@ -30,24 +30,7 @@
   <header class="app-header">
     <a class="brand" href={base || '/'}>
       <span class="brand-mark" aria-hidden="true">
-        <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-          <path
-            d="M1 1L7 5.5L13 1"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-          <rect
-            x="0.5"
-            y="0.5"
-            width="13"
-            height="9"
-            rx="0.5"
-            stroke="currentColor"
-            stroke-width="1"
-          />
-        </svg>
+        <img src="{base}/travel-mark.svg" width="36" height="36" alt="" />
       </span>
       <span class="brand-name">Travel</span>
       {#if version}
@@ -93,9 +76,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: 2px solid var(--env-ink);
+    width: 36px;
+    height: 36px;
   }
   .brand-name {
     font-weight: 600;
